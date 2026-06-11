@@ -1,7 +1,16 @@
-const { app, BrowserWindow, Tray, Menu, shell, nativeImage } = require('electron');
+const electron = require('electron');
+const { app, BrowserWindow, Tray, Menu, shell, nativeImage } = electron;
 const { spawn } = require('child_process');
 const path = require('path');
 const fs   = require('fs');
+
+// ─── Cloud Deployment Safeguard ───────────────────────────────────────────────
+// If a cloud host accidentally runs this instead of server.js, safely redirect
+if (!app) {
+  console.log('Running in Cloud Server Mode...');
+  require('./server.js');
+  return;
+}
 
 const PORT = 3000;
 let tray       = null;
