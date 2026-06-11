@@ -1,5 +1,4 @@
 const express = require('express');
-const multer  = require('multer');
 const cors    = require('cors');
 const { v4: uuidv4 } = require('uuid');
 const fs   = require('fs');
@@ -19,23 +18,15 @@ const META_FILE      = path.join(DATA_DIR, 'recordings.json');
 });
 if (!fs.existsSync(META_FILE)) fs.writeFileSync(META_FILE, '[]');
 
+// Track the last time a chunk was appended for each recording to handle timeouts accurately
+const appendTimes = new Map();
+
 // ─── Middleware ───────────────────────────────────────────────────────────────
 app.use(cors());
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
-// ─── Multer — video upload ────────────────────────────────────────────────────
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => cb(null, RECORDINGS_DIR),
-  filename: (req, file, cb) => {
-    const id = req.params.id;
-    cb(null, `${id}.webm`);
-  },
-});
-const upload = multer({
-  storage,
-  limits: { fileSize: 5 * 1024 * 1024 * 1024 }, // 5 GB max
-});
+// Removed Multer configuration (using express.raw for append)
 
 // ─── Metadata helpers ─────────────────────────────────────────────────────────
 function readMeta() {
@@ -45,11 +36,50 @@ function readMeta() {
 function writeMeta(data) {
   fs.writeFileSync(META_FILE, JSON.stringify(data, null, 2));
 }
+function finalizeInterruptedRecordings() {
+  const meta = readMeta();
+  let changed = false;
+  const now = Date.now();
+  
+  meta.forEach(r => {
+    if (r.status === 'recording') {
+      const filePath = path.join(RECORDINGS_DIR, `${r.id}.webm`);
+      if (fs.existsSync(filePath)) {
+        const lastAppend = appendTimes.has(r.id) ? appendTimes.get(r.id) : new Date(r.createdAt).getTime();
+        // If the file hasn't been updated for more than 15 seconds, assume recording stopped/interrupted
+        if (now - lastAppend > 15000) {
+          r.status = 'ready';
+          const stats = fs.statSync(filePath);
+          r.size = stats.size;
+          const durationMs = lastAppend - new Date(r.createdAt).getTime();
+          r.duration = Math.max(0, Math.floor(durationMs / 1000));
+          r.filename = `${r.id}.webm`;
+          r.shareUrl = `/watch?id=${r.shareId}`;
+          changed = true;
+          appendTimes.delete(r.id);
+        }
+      } else {
+        // If it was created more than 15 seconds ago but no file exists, mark as failed
+        const ageMs = now - new Date(r.createdAt).getTime();
+        if (ageMs > 15000) {
+          r.status = 'failed';
+          changed = true;
+        }
+      }
+    }
+  });
+  
+  if (changed) {
+    writeMeta(meta);
+  }
+}
 
 // ─── API Routes ───────────────────────────────────────────────────────────────
 
 // List all recordings
 app.get('/api/recordings', (req, res) => {
+  res.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+  finalizeInterruptedRecordings();
   const recordings = readMeta().sort((a, b) =>
     new Date(b.createdAt) - new Date(a.createdAt)
   );
@@ -84,24 +114,55 @@ app.post('/api/recordings/start', (req, res) => {
   res.json(record);
 });
 
-// Upload video blob after recording stops
-app.post('/api/recordings/:id/upload', upload.single('video'), (req, res) => {
+// Append video chunk
+app.post('/api/recordings/:id/append', express.raw({ type: '*/*', limit: '50mb' }), (req, res) => {
   const { id } = req.params;
-  const { duration } = req.body;
+
+  const meta = readMeta();
+  const record = meta.find(r => r.id === id);
+  if (!record) return res.status(404).json({ error: 'Not found' });
+
+  const filePath = path.join(RECORDINGS_DIR, `${id}.webm`);
+
+  try {
+    if (req.body && req.body.length > 0) {
+      fs.appendFileSync(filePath, req.body);
+      appendTimes.set(id, Date.now());
+    }
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Append error:', err);
+    res.status(500).json({ error: 'Failed to append chunk' });
+  }
+});
+
+// Finalize recording after it stops
+app.post('/api/recordings/:id/finalize', express.text({ type: 'text/plain' }), (req, res) => {
+  const { id } = req.params;
+  
+  let duration = 0;
+  if (typeof req.body === 'string' && req.body.trim().length > 0) {
+    try { duration = JSON.parse(req.body).duration; } catch (e) {}
+  } else if (req.body && req.body.duration) {
+    duration = req.body.duration;
+  }
 
   const meta = readMeta();
   const idx  = meta.findIndex(r => r.id === id);
   if (idx === -1) return res.status(404).json({ error: 'Not found' });
 
-  const file = req.file;
-  if (!file) return res.status(400).json({ error: 'No file uploaded' });
+  const filePath = path.join(RECORDINGS_DIR, `${id}.webm`);
+  if (!fs.existsSync(filePath)) return res.status(400).json({ error: 'No file found' });
 
-  meta[idx].filename  = file.filename;
-  meta[idx].size      = file.size;
-  meta[idx].duration  = parseFloat(duration) || 0;
+  const stats = fs.statSync(filePath);
+
+  meta[idx].filename  = `${id}.webm`;
+  meta[idx].size      = stats.size;
+  meta[idx].duration  = parseFloat(duration) || meta[idx].duration || 0;
   meta[idx].status    = 'ready';
   meta[idx].shareUrl  = `/watch?id=${meta[idx].shareId}`;
   writeMeta(meta);
+  appendTimes.delete(id);
 
   res.json(meta[idx]);
 });
@@ -182,6 +243,7 @@ app.get('/watch', (req, res) => res.sendFile(path.join(__dirname, 'public', 'wat
 app.get('/record', (req, res) => res.sendFile(path.join(__dirname, 'public', 'record.html')));
 
 // ─── Start server ─────────────────────────────────────────────────────────────
+finalizeInterruptedRecordings();
 app.listen(PORT, '0.0.0.0', () => {
   const interfaces = os.networkInterfaces();
   const ips = Object.values(interfaces)
