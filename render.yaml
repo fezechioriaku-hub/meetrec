@@ -1,0 +1,16 @@
+services:
+  - type: web
+    name: meetrec
+    env: node
+    plan: starter          # $7/month — includes 1 GB persistent disk
+    buildCommand: npm install
+    startCommand: node server.js
+    disk:
+      name: recordings
+      mountPath: /opt/render/project/src/recordings
+      sizeGB: 10
+    envVars:
+      - key: PORT
+        value: 3000
+      - key: NODE_ENV
+        value: production

@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>MeetRec — Recording</title>
+  <link rel="stylesheet" href="/css/main.css" />
+  <style>
+    .toggle-card {
+      margin-top: 14px;
+      display: flex; align-items: flex-start; gap: 14px;
+      padding: 16px 20px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      max-width: 480px; width: 100%;
+      transition: border-color 0.3s;
+      cursor: pointer;
+      user-select: none;
+    }
+    .toggle-card:hover { border-color: var(--border2); }
+    .toggle-card.active { border-color: var(--accent); background: rgba(124,111,255,0.06); }
+    .toggle-card.active-rec { border-color: var(--red); background: rgba(255,77,109,0.06); }
+
+    .toggle-card-text { flex: 1; }
+    .toggle-card-title { font-size: 14px; font-weight: 600; margin-bottom: 3px; }
+    .toggle-card-sub { font-size: 12px; color: var(--text3); line-height: 1.5; }
+    .toggle-card-sub.active-label { color: var(--accent); }
+    .toggle-card-sub.recording-label { color: var(--red); }
+  </style>
+</head>
+<body>
+  <div class="ambient"></div>
+  <div class="page">
+
+    <nav class="nav">
+      <div class="nav-logo">
+        <div class="nav-logo-icon">🔴</div>
+        MeetRec
+      </div>
+      <div class="nav-actions">
+        <a href="/" class="btn btn-ghost btn-sm">← Dashboard</a>
+      </div>
+    </nav>
+
+    <div class="recorder-center">
+
+      <!-- Status ring -->
+      <div class="rec-status-ring" id="statusRing">
+        <span class="rec-icon" id="recIcon">⏺</span>
+      </div>
+
+      <!-- Timer -->
+      <div class="rec-timer" id="timer">0:00:00</div>
+      <div class="rec-label" id="recLabel">Ready to record</div>
+
+      <!-- Controls -->
+      <div class="rec-controls">
+        <button class="btn btn-red btn-lg" id="startBtn">
+          ⏺ Start Recording
+        </button>
+        <button class="btn btn-ghost btn-lg" id="pauseBtn" style="display:none">
+          ⏸ Pause
+        </button>
+        <button class="btn btn-ghost btn-lg" id="stopBtn" style="display:none">
+          ⏹ Stop & Save
+        </button>
+      </div>
+
+      <!-- Auto-record toggle card -->
+      <div class="toggle-card" id="autoRecCard" onclick="document.getElementById('autoRecToggle').click()">
+        <div class="toggle" id="autoRecToggle"></div>
+        <div class="toggle-card-text">
+          <div class="toggle-card-title">🔄 Auto-record on startup</div>
+          <div class="toggle-card-sub" id="autoToggleLabel">
+            Enable to start recording automatically every time you visit this page
+          </div>
+        </div>
+      </div>
+
+      <!-- Audio toggle card -->
+      <div class="toggle-card" onclick="document.getElementById('audioToggle').click()">
+        <div class="toggle on" id="audioToggle"></div>
+        <div class="toggle-card-text">
+          <div class="toggle-card-title">🎙️ Record audio</div>
+          <div class="toggle-card-sub">Capture system audio + microphone</div>
+        </div>
+      </div>
+
+      <!-- Upload progress -->
+      <div class="upload-progress" id="uploadProgress" style="max-width:480px;width:100%">
+        <div class="progress-bar">
+          <div class="progress-fill" id="progressFill"></div>
+        </div>
+        <div class="progress-label" id="progressLabel">Uploading recording…</div>
+      </div>
+
+      <!-- Live preview -->
+      <div class="rec-preview" id="previewBox" style="max-width:640px;">
+        <video id="previewVideo" autoplay muted playsinline></video>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="toast-container" id="toastContainer"></div>
+  <script src="/js/recorder.js"></script>
+  <script>
+    // Extra: highlight toggle card border when active
+    const autoCard = document.getElementById('autoRecCard');
+    const autoTog  = document.getElementById('autoRecToggle');
+
+    function syncCardStyle() {
+      const on = autoTog.classList.contains('on');
+      autoCard.classList.toggle('active', on);
+      const lbl = document.getElementById('autoToggleLabel');
+      if (on) {
+        lbl.classList.add('active-label');
+        lbl.classList.remove('recording-label');
+      } else {
+        lbl.classList.remove('active-label', 'recording-label');
+      }
+    }
+    // Observe toggle class changes to sync card style
+    new MutationObserver(syncCardStyle).observe(autoTog, { attributes: true, attributeFilter: ['class'] });
+    syncCardStyle();
+  </script>
+</body>
+</html>

@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>MeetRec — Meeting Recorder Dashboard</title>
+  <meta name="description" content="Record, manage, and share your meeting recordings with MeetRec." />
+  <link rel="stylesheet" href="/css/main.css" />
+</head>
+<body>
+  <div class="ambient"></div>
+  <div class="page">
+
+    <!-- Nav -->
+    <nav class="nav">
+      <div class="nav-logo">
+        <div class="nav-logo-icon">🔴</div>
+        MeetRec
+      </div>
+      <div class="nav-actions">
+        <a href="/record" class="btn btn-red btn-sm" id="newRecBtn">
+          ⏺ New Recording
+        </a>
+      </div>
+    </nav>
+
+    <div class="container">
+
+      <!-- Stats row -->
+      <div class="stats-row" id="statsRow">
+        <div class="stat">
+          <div class="stat-value" id="statTotal">0</div>
+          <div class="stat-label">Total Recordings</div>
+        </div>
+        <div class="stat">
+          <div class="stat-value" id="statDuration">0m</div>
+          <div class="stat-label">Total Duration</div>
+        </div>
+        <div class="stat">
+          <div class="stat-value" id="statSize">0 MB</div>
+          <div class="stat-label">Storage Used</div>
+        </div>
+        <div class="stat">
+          <div class="stat-value" id="statShared">0</div>
+          <div class="stat-label">Shared Links</div>
+        </div>
+      </div>
+
+      <!-- Section header -->
+      <div class="section-header">
+        <h2>Recordings</h2>
+        <div class="flex gap-2">
+          <input
+            type="text"
+            id="searchInput"
+            placeholder="🔍  Search recordings…"
+            class="form-input"
+            style="width: 240px; padding: 9px 14px; font-size: 13px;"
+          />
+        </div>
+      </div>
+
+      <!-- Recordings grid -->
+      <div id="recordingsGrid" class="recordings-grid">
+        <div class="empty-state">
+          <div class="icon">🎬</div>
+          <h3>No recordings yet</h3>
+          <p>Start your first meeting recording.<br/>It will appear here automatically.</p>
+          <a href="/record" class="btn btn-primary btn-lg">⏺ Start Recording</a>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Share Modal -->
+  <div class="modal-overlay" id="shareModal">
+    <div class="modal">
+      <h3>📤 Share Recording</h3>
+      <p>Anyone with this link can watch the recording — no login required.</p>
+      <div class="share-box">
+        <input type="text" class="share-input" id="shareLinkInput" readonly />
+        <button class="btn btn-primary" id="copyLinkBtn">Copy</button>
+      </div>
+      <div style="display:flex; gap:10px; justify-content: flex-end;">
+        <button class="btn btn-ghost" id="closeShareModal">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Rename Modal -->
+  <div class="modal-overlay" id="renameModal">
+    <div class="modal">
+      <h3>✏️ Rename Recording</h3>
+      <div class="form-group">
+        <label class="form-label">Title</label>
+        <input type="text" class="form-input" id="renameInput" placeholder="Meeting title…" />
+      </div>
+      <div style="display:flex; gap:10px; justify-content: flex-end;">
+        <button class="btn btn-ghost" id="closeRenameModal">Cancel</button>
+        <button class="btn btn-primary" id="saveRenameBtn">Save</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Delete Modal -->
+  <div class="modal-overlay" id="deleteModal">
+    <div class="modal">
+      <h3>🗑️ Delete Recording</h3>
+      <p>Are you sure? This will permanently delete the video file. This cannot be undone.</p>
+      <div style="display:flex; gap:10px; justify-content: flex-end;">
+        <button class="btn btn-ghost" id="closeDeleteModal">Cancel</button>
+        <button class="btn btn-red" id="confirmDeleteBtn">Delete</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast container -->
+  <div class="toast-container" id="toastContainer"></div>
+
+  <script src="/js/dashboard.js"></script>
+</body>
+</html>
