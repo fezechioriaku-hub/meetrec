@@ -7,6 +7,7 @@ let pausedAt       = null;
 let totalPausedMs  = 0;
 let timerInterval  = null;
 let chunks         = [];
+let uploadQueue    = Promise.resolve();
 let isRecording    = false;
 let isPaused       = false;
 
@@ -195,6 +196,7 @@ async function startRecording() {
     ].find(t => MediaRecorder.isTypeSupported(t)) || 'video/webm';
 
     chunks = [];
+    uploadQueue = Promise.resolve();
     mediaRecorder = new MediaRecorder(stream, {
       mimeType,
       videoBitsPerSecond: 3_000_000,
@@ -202,11 +204,28 @@ async function startRecording() {
     });
 
     mediaRecorder.ondataavailable = (e) => {
-      if (e.data?.size > 0) chunks.push(e.data);
+      if (e.data?.size > 0) {
+        // Queue the chunk upload to ensure order
+        const chunk = e.data;
+        uploadQueue = uploadQueue.then(() =>
+          fetch(`/api/recordings/${recordingId}/append`, {
+            method: 'POST',
+            body: chunk,
+            headers: { 'Content-Type': 'application/octet-stream' }
+          }).then(res => {
+            if (!res.ok) throw new Error('Failed to append');
+          }).catch(err => {
+            console.error('Chunk upload error:', err);
+            toast('Failed to upload a video chunk', 'error');
+          })
+        );
+      }
     };
     mediaRecorder.onstop = async () => {
       clearInterval(timerInterval);
-      await uploadRecording();
+      setUIState('uploading'); // Shows "Saving recording to server..."
+      await uploadQueue;
+      await finalizeRecording();
     };
     mediaRecorder.onerror = (e) => {
       toast(`Recorder error: ${e.error?.message || 'Unknown'}`, 'error');
@@ -214,7 +233,7 @@ async function startRecording() {
       setUIState('idle');
     };
 
-    mediaRecorder.start(5000); // collect data every 5s
+    mediaRecorder.start(2000); // collect data every 2s
     isRecording = true;
     isPaused = false;
     recordingStart = Date.now();
@@ -284,54 +303,37 @@ function stopRecording() {
     stream = null;
   }
   previewVideo.srcObject = null;
-  setUIState('uploading');
+  // UI state is changed in onstop
 }
 
-// ─── Upload ───────────────────────────────────────────────────────────────────
-async function uploadRecording() {
-  if (!recordingId || chunks.length === 0) {
+// ─── Finalize ─────────────────────────────────────────────────────────────────
+async function finalizeRecording() {
+  if (!recordingId) {
     setUIState('idle');
     return;
   }
 
   uploadProg.classList.add('visible');
-  progressFill.style.width = '0%';
-  progressLabel.textContent = 'Preparing upload…';
+  progressFill.style.width = '100%';
+  progressLabel.textContent = 'Finalizing recording…';
 
-  const blob     = new Blob(chunks, { type: 'video/webm' });
   const duration = Math.floor(getElapsedMs() / 1000);
-  const formData = new FormData();
-  formData.append('video', blob, `${recordingId}.webm`);
-  formData.append('duration', duration);
 
   try {
-    await new Promise((resolve, reject) => {
-      const xhr = new XMLHttpRequest();
-      xhr.open('POST', `/api/recordings/${recordingId}/upload`);
-
-      xhr.upload.addEventListener('progress', (e) => {
-        if (e.lengthComputable) {
-          const pct = Math.round((e.loaded / e.total) * 100);
-          progressFill.style.width = `${pct}%`;
-          progressLabel.textContent = `Uploading… ${pct}%`;
-        }
-      });
-      xhr.addEventListener('load', () => {
-        xhr.status >= 200 && xhr.status < 300
-          ? resolve(JSON.parse(xhr.responseText))
-          : reject(new Error(`HTTP ${xhr.status}`));
-      });
-      xhr.addEventListener('error', () => reject(new Error('Network error')));
-      xhr.send(formData);
+    const res = await fetch(`/api/recordings/${recordingId}/finalize`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ duration })
     });
+    
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
 
-    progressFill.style.width = '100%';
     progressLabel.textContent = '✅ Saved! Going to dashboard…';
     toast('Recording saved!', 'success');
     setTimeout(() => { window.location.href = '/'; }, 1800);
 
   } catch (err) {
-    toast(`Upload failed: ${err.message}`, 'error');
+    toast(`Finalize failed: ${err.message}`, 'error');
     uploadProg.classList.remove('visible');
     setUIState('idle');
   }
@@ -358,5 +360,14 @@ window.addEventListener('load', () => {
     setTimeout(async () => {
       await startRecording();
     }, 1000);
+  }
+});
+
+// ─── Instant save on sleep/close ──────────────────────────────────────────────
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'hidden' && isRecording && recordingId) {
+    const duration = Math.floor(getElapsedMs() / 1000);
+    // sendBeacon guarantees the request is sent even if the OS is suspending or page is closing
+    navigator.sendBeacon(`/api/recordings/${recordingId}/finalize`, JSON.stringify({ duration }));
   }
 });
