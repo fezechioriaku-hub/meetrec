@@ -81,10 +81,15 @@ function renderRecordings(recordings) {
           ? `<video src="/recordings/${r.filename}#t=2" preload="metadata" muted></video>
              <div class="play-overlay"><div class="play-circle">▶</div></div>
              <div class="duration-badge">${formatDuration(r.duration)}</div>`
-          : `<div class="thumb-placeholder">
-               <div class="icon">🔴</div>
-               <span>Recording in progress</span>
-             </div>`
+          : r.status === 'failed' 
+            ? `<div class="thumb-placeholder" style="background:#ffebee; color:#c62828;">
+                 <div class="icon">❌</div>
+                 <span>Recording failed/interrupted</span>
+               </div>`
+            : `<div class="thumb-placeholder">
+                 <div class="icon">🔴</div>
+                 <span>Recording in progress</span>
+               </div>`
         }
       </div>
       <div class="rec-card-body">
@@ -94,6 +99,8 @@ function renderRecordings(recordings) {
           <span>💾 ${formatBytes(r.size)}</span>
           ${r.status === 'recording'
             ? '<span><span class="badge badge-recording"><span class="badge-dot"></span> Recording</span></span>'
+            : r.status === 'failed'
+            ? '<span style="color:#c62828; font-size: 0.85rem; font-weight: 500;">Failed</span>'
             : ''
           }
         </div>
